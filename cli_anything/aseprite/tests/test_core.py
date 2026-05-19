@@ -568,7 +568,7 @@ class TestScriptRunner:
 
 
 class TestDrawClass:
-    """Unit tests for Draw class (Lua script generation)."""
+    """Unit tests for Draw class (useTool-based Lua script generation)."""
 
     def test_init(self):
         from cli_anything.aseprite.core.draw import Draw
@@ -586,25 +586,27 @@ class TestDrawClass:
         assert 'width=32' in lua
         assert 'height=24' in lua
         assert 'local spr = app.sprites[1]' in lua
-        assert 'local img = spr.cels[1].image' in lua
         assert d._has_newfile is True
 
-    def test_pixel_adds_putpixel(self):
+    def test_pixel_uses_usetool_pencil(self):
         from cli_anything.aseprite.core.draw import Draw
         d = Draw()
         d.pixel(10, 20, 255, 128, 64, 200)
         lua = d.get_lua()
-        assert 'img:putPixel(10,20,rgba(255,128,64,200))' in lua
+        assert 'app.useTool' in lua
+        assert 'tool="pencil"' in lua
+        assert 'Point(10,20)' in lua
+        assert 'Color(255,128,64,200)' in lua
 
-    def test_fill_generates_loop(self):
+    def test_fill_uses_filled_rectangle(self):
         from cli_anything.aseprite.core.draw import Draw
         d = Draw()
         d.new("/t.png", 8, 8)
         d.fill(100, 150, 200)
         lua = d.get_lua()
-        assert 'spr.height-1' in lua
-        assert 'spr.width-1' in lua
-        assert 'rgba(100,150,200,255)' in lua
+        assert 'app.useTool' in lua
+        assert 'tool="filled_rectangle"' in lua
+        assert 'Color(100,150,200,255)' in lua
 
     def test_rect_fill_and_outline(self):
         from cli_anything.aseprite.core.draw import Draw
@@ -612,30 +614,56 @@ class TestDrawClass:
         d.new("/t.png", 32, 32)
         d.rect(5, 5, 10, 10, 255, 0, 0, fill=True)
         lua_fill = d.get_lua()
-        assert 'for _y=5,14' in lua_fill
+        assert 'tool="filled_rectangle"' in lua_fill
+        assert 'Point(5,5)' in lua_fill
+        assert 'Point(14,14)' in lua_fill
 
         d2 = Draw()
         d2.new("/t2.png", 32, 32)
         d2.rect(5, 5, 10, 10, 255, 0, 0, fill=False)
         lua_outline = d2.get_lua()
-        assert 'for _x=5,14' in lua_outline
+        assert 'tool="rectangle"' in lua_outline
 
-    def test_circle_generates_lua(self):
+    def test_circle_uses_usetool_ellipse(self):
         from cli_anything.aseprite.core.draw import Draw
         d = Draw()
         d.new("/t.png", 64, 64)
         d.circle(32, 32, 10, 0, 255, 0, fill=True)
         lua = d.get_lua()
-        assert 'math.sqrt' in lua
-        assert 'd <= 10' in lua
+        assert 'app.useTool' in lua
+        assert 'tool="filled_ellipse"' in lua
+        assert 'Point(22,22)' in lua  # cx - radius, cy - radius
+        assert 'Point(41,41)' in lua  # cx + radius - 1, cy + radius - 1
 
-    def test_line_bresenham(self):
+    def test_line_uses_usetool_line(self):
         from cli_anything.aseprite.core.draw import Draw
         d = Draw()
         d.new("/t.png", 32, 32)
         d.line(0, 0, 10, 10, 255, 255, 255)
         lua = d.get_lua()
-        assert 'Bresenham' in lua or 'err=dx-dy' in lua
+        assert 'app.useTool' in lua
+        assert 'tool="line"' in lua
+        assert 'Point(0,0)' in lua
+        assert 'Point(10,10)' in lua
+
+    def test_flood_fill_generates_lua(self):
+        from cli_anything.aseprite.core.draw import Draw
+        d = Draw()
+        d.new("/t.png", 32, 32)
+        d.flood_fill(16, 16, 255, 0, 0, tolerance=5)
+        lua = d.get_lua()
+        assert 'tool="paint_bucket"' in lua
+        assert 'tolerance=5' in lua
+
+    def test_ellipse_generates_lua(self):
+        from cli_anything.aseprite.core.draw import Draw
+        d = Draw()
+        d.new("/t.png", 64, 64)
+        d.ellipse(10, 10, 40, 30, 0, 255, 0, fill=True)
+        lua = d.get_lua()
+        assert 'tool="filled_ellipse"' in lua
+        assert 'Point(10,10)' in lua
+        assert 'Point(49,39)' in lua  # 10+40-1, 10+30-1
 
     def test_chain_builds_script(self):
         from cli_anything.aseprite.core.draw import Draw
@@ -644,9 +672,11 @@ class TestDrawClass:
         d.fill(0, 0, 0)
         d.pixel(8, 8, 255, 255, 255)
         d.rect(2, 2, 4, 4, 255, 0, 0)
+        d.line(0, 0, 15, 15, 0, 255, 0)
         lua = d.get_lua()
         lines = lua.split('\n')
-        assert len(lines) >= 6  # prologue + fill + pixel + rect
+        assert len(lines) >= 5  # prologue + fill + pixel + rect + line
+        assert lua.count('app.useTool') >= 4
 
     def test_dry_run_no_execution(self):
         from cli_anything.aseprite.core.draw import Draw
@@ -670,6 +700,33 @@ class TestDrawClass:
         lua = d.get_lua()
         assert isinstance(lua, str)
         assert lua.startswith('app.command.NewFile')
+
+    def test_erase_generates_lua(self):
+        from cli_anything.aseprite.core.draw import Draw
+        d = Draw()
+        d.new("/t.png", 32, 32)
+        d.erase(5, 5, 10, 10)
+        lua = d.get_lua()
+        assert 'tool="eraser"' in lua
+
+    def test_polyline_generates_lua(self):
+        from cli_anything.aseprite.core.draw import Draw
+        d = Draw()
+        d.new("/t.png", 32, 32)
+        d.polyline([(0, 0), (10, 10), (20, 5)], 255, 0, 0)
+        lua = d.get_lua()
+        assert 'tool="contour"' in lua
+        assert 'Point(0,0)' in lua
+        assert 'Point(20,5)' in lua
+
+    def test_raw_adds_arbitrary_lua(self):
+        from cli_anything.aseprite.core.draw import Draw
+        d = Draw()
+        d.raw("-- custom comment")
+        d.raw("app.command.Something()")
+        lua = d.get_lua()
+        assert '-- custom comment' in lua
+        assert 'app.command.Something()' in lua
 
 
 # ── Helpers Tests ─────────────────────────────────────────────────

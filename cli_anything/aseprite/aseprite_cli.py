@@ -4,14 +4,22 @@ Usage:
   cli-anything-aseprite open <file>              Open a sprite file
   cli-anything-aseprite info [file]              Get sprite metadata
   cli-anything-aseprite layers list <file>       List layers
-  cli-anything-aseprite tags list <file>         List frame tags
-  cli-anything-aseprite slices list <file>       List slices
-  cli-anything-aseprite palette list <file>      List palette entries
+  cli-anything-aseprite layers add <file> ...    Add/delete/rename layers
+  cli-anything-aseprite tags list <file>         List/add/delete frame tags
+  cli-anything-aseprite slices list <file>       List/add/delete slices
   cli-anything-aseprite export sheet <file> ...  Export sprite sheet
   cli-anything-aseprite export frame <file> ...  Export single frame
+  cli-anything-aseprite export gif <file> ...    Export animated GIF
+  cli-anything-aseprite export tileset ...       Export tileset
   cli-anything-aseprite script run <file> <lua>  Run Lua script
+  cli-anything-aseprite shell [file]            Interactive Lua console
   cli-anything-aseprite draw new <file> W H      Create new canvas
-  cli-anything-aseprite draw rect <file> ...     Draw shapes
+  cli-anything-aseprite draw rect <file> ...     Draw shapes (useTool API)
+  cli-anything-aseprite edit crop <file> ...     Crop/resize/flatten/flip
+  cli-anything-aseprite frames add <file> ...    Add/delete frames
+  cli-anything-aseprite color get/set            Manage fg/bg colors
+  cli-anything-aseprite select all/none <file>   Manage selection
+  cli-anything-aseprite command <ID> ...         Run Aseprite built-in command
   cli-anything-aseprite repl                     Start REPL mode
 """
 
@@ -624,6 +632,26 @@ def repl(ctx, prompt):
         "draw line <file> X1 Y1 X2 Y2 --color r,g,b": "Draw line",
         "draw fill <file> --color r,g,b": "Fill canvas with color",
         "draw grad <file> --from r,g,b --to r,g,b [--direction h|v]": "Gradient fill",
+        "draw ellipse <file> X Y W H --color r,g,b": "Draw ellipse",
+        "draw flood-fill <file> X Y --color r,g,b": "Flood fill area",
+        "edit crop <file> --width W --height H [--x X --y Y]": "Crop sprite",
+        "edit resize <file> --width W --height H": "Resize sprite",
+        "edit flatten <file>": "Flatten all layers",
+        "edit flip <file> [--horizontal|--vertical]": "Flip sprite",
+        "layers add <file> --name NAME": "Add new layer",
+        "layers delete <file> <name>": "Delete layer",
+        "layers rename <file> <old> <new>": "Rename layer",
+        "frames add <file> [--at N] [--empty]": "Add new frame",
+        "frames delete <file> <N>": "Delete frame",
+        "tags add <file> --name N --from-frame F --to-frame T": "Add frame tag",
+        "tags delete <file> <name>": "Delete tag",
+        "slices add <file> --name N --width W --height H": "Add slice",
+        "slices delete <file> <name>": "Delete slice",
+        "command <CommandID> [file] [-p k=v ...]": "Run Aseprite command",
+        "color get": "Show fg/bg colors",
+        "color set fg|bg r,g,b[,a]": "Set fg/bg color",
+        "select all <file>": "Select entire canvas",
+        "select none <file>": "Deselect",
         "quit": "Exit REPL",
     }
 
@@ -842,7 +870,7 @@ def draw_grad(ctx, path, from_c, to_c, direction):
     d._dry_run = ctx.obj.get("dry_run", False)
     d.open(path)
     if direction == "h":
-        d._lua(
+        d.raw(
             f'for x=0,spr.width-1 do '
             f'local t=x/(spr.width-1); '
             f'local r={fr}+({tr - fr})*t; '
@@ -850,7 +878,7 @@ def draw_grad(ctx, path, from_c, to_c, direction):
             f'local b={fb}+({tb - fb})*t; '
             'for y=0,spr.height-1 do img:putPixel(x,y,rgba(r,g,b,255)) end end')
     else:
-        d._lua(
+        d.raw(
             f'for y=0,spr.height-1 do '
             f'local t=y/(spr.height-1); '
             f'local r={fr}+({tr - fr})*t; '
@@ -862,6 +890,582 @@ def draw_grad(ctx, path, from_c, to_c, direction):
         JSONOutput.print({"status": "ok", "path": os.path.abspath(path)})
     else:
         click.echo(f"Gradient drawn: {os.path.abspath(path)}")
+
+
+@draw.command("ellipse")
+@click.argument("path")
+@click.argument("x", type=int)
+@click.argument("y", type=int)
+@click.argument("w", type=int)
+@click.argument("h", type=int)
+@click.option("--color", required=True, help="Color as r,g,b or r,g,b,a")
+@click.option("--outline/--fill", default=False, help="Draw outline instead of filled")
+@click.pass_context
+def draw_ellipse(ctx, path, x, y, w, h, color, outline):
+    """Draw an ellipse within bounding rectangle (x,y,w,h)."""
+    parts = [int(c.strip()) for c in color.split(",")]
+    r, g, b = parts[0], parts[1], parts[2]
+    a = parts[3] if len(parts) > 3 else 255
+    d = Draw(_global_session.project._aseprite)
+    d._dry_run = ctx.obj.get("dry_run", False)
+    d.open(path)
+    d.ellipse(x, y, w, h, r, g, b, a, fill=not outline)
+    d.save()
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path)})
+    else:
+        click.echo(f"Ellipse drawn: {os.path.abspath(path)}")
+
+
+@draw.command("flood-fill")
+@click.argument("path")
+@click.argument("x", type=int)
+@click.argument("y", type=int)
+@click.option("--color", required=True, help="Color as r,g,b or r,g,b,a")
+@click.option("--tolerance", type=int, default=0, help="Fill tolerance (0=exact match)")
+@click.pass_context
+def draw_flood_fill(ctx, path, x, y, color, tolerance):
+    """Flood-fill area starting from (x,y)."""
+    parts = [int(c.strip()) for c in color.split(",")]
+    r, g, b = parts[0], parts[1], parts[2]
+    a = parts[3] if len(parts) > 3 else 255
+    d = Draw(_global_session.project._aseprite)
+    d._dry_run = ctx.obj.get("dry_run", False)
+    d.open(path)
+    d.flood_fill(x, y, r, g, b, a, tolerance=tolerance)
+    d.save()
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path)})
+    else:
+        click.echo(f"Flood-filled: {os.path.abspath(path)}")
+
+
+# ── edit group ──────────────────────────────────────────────────────
+
+
+@cli.group()
+def edit():
+    """Edit sprites: crop, resize, flatten, flip, etc."""
+
+
+@edit.command("crop")
+@click.argument("path")
+@click.option("--x", type=int, default=0, help="Crop origin X")
+@click.option("--y", type=int, default=0, help="Crop origin Y")
+@click.option("--width", type=int, required=True, help="Crop width")
+@click.option("--height", type=int, required=True, help="Crop height")
+@click.pass_context
+def edit_crop(ctx, path, x, y, width, height):
+    """Crop sprite to a rectangle."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr:crop({x}, {y}, {width}, {height})\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "crop failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "crop": {"x": x, "y": y, "width": width, "height": height}})
+    else:
+        click.echo(f"Cropped {os.path.abspath(path)} to {width}x{height}")
+
+
+@edit.command("resize")
+@click.argument("path")
+@click.option("--width", type=int, required=True, help="New width")
+@click.option("--height", type=int, required=True, help="New height")
+@click.pass_context
+def edit_resize(ctx, path, width, height):
+    """Resize sprite to new dimensions."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr:resize({width}, {height})\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "resize failed"))
+    if ctx.obj["json"]:
+        JsonOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "size": {"width": width, "height": height}})
+    else:
+        click.echo(f"Resized {os.path.abspath(path)} to {width}x{height}")
+
+
+@edit.command("flatten")
+@click.argument("path")
+@click.pass_context
+def edit_flatten(ctx, path):
+    """Flatten all layers into one."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr:flatten()\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "flatten failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path)})
+    else:
+        click.echo(f"Flattened {os.path.abspath(path)}")
+
+
+@edit.command("flip")
+@click.argument("path")
+@click.option("--horizontal/--vertical", default=True, help="Flip direction")
+@click.pass_context
+def edit_flip(ctx, path, horizontal):
+    """Flip sprite horizontally or vertically."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    dir_flag = "horizontal=true" if horizontal else "vertical=true"
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr.cels[1].image:flip({{ {dir_flag} }})\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "flip failed"))
+    direction = "horizontally" if horizontal else "vertically"
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "direction": direction})
+    else:
+        click.echo(f"Flipped {os.path.abspath(path)} {direction}")
+
+
+# ── layers management ───────────────────────────────────────────────
+
+
+@layers.command("add")
+@click.argument("path")
+@click.option("--name", default="New Layer", help="Layer name")
+@click.pass_context
+def layers_add(ctx, path, name):
+    """Add a new layer to a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'local layer = spr:newLayer()\n'
+        f'layer.name = "{name}"\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "add layer failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "layer": name})
+    else:
+        click.echo(f"Added layer '{name}' to {os.path.abspath(path)}")
+
+
+@layers.command("delete")
+@click.argument("path")
+@click.argument("name")
+@click.pass_context
+def layers_delete(ctx, path, name):
+    """Delete a layer by name from a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr:deleteLayer("{name}")\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "delete layer failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "deleted": name})
+    else:
+        click.echo(f"Deleted layer '{name}' from {os.path.abspath(path)}")
+
+
+@layers.command("rename")
+@click.argument("path")
+@click.argument("old_name")
+@click.argument("new_name")
+@click.pass_context
+def layers_rename(ctx, path, old_name, new_name):
+    """Rename a layer in a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'for i, layer in ipairs(spr.layers) do\n'
+        f'  if layer.name == "{old_name}" then\n'
+        f'    layer.name = "{new_name}"\n'
+        f'    break\n'
+        f'  end\n'
+        f'end\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "rename layer failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "old": old_name, "new": new_name})
+    else:
+        click.echo(f"Renamed layer '{old_name}' → '{new_name}'")
+
+
+# ── frames management ───────────────────────────────────────────────
+
+
+@cli.group()
+def frames():
+    """Manage animation frames."""
+
+
+@frames.command("add")
+@click.argument("path")
+@click.option("--at", "at_frame", type=int, help="Insert at frame number")
+@click.option("--empty", is_flag=True, help="Create empty frame (no cel copy)")
+@click.pass_context
+def frames_add(ctx, path, at_frame, empty):
+    """Add a new frame to a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    frame_arg = f"local frame = spr:newFrame({at_frame})" if at_frame else "local frame = spr:newFrame(#spr.frames + 1)"
+    if empty:
+        frame_arg = f"local frame = spr:newEmptyFrame({at_frame or '#spr.frames + 1'})"
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'{frame_arg}\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "add frame failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path)})
+    else:
+        click.echo(f"Added frame to {os.path.abspath(path)}")
+
+
+@frames.command("delete")
+@click.argument("path")
+@click.argument("frame_number", type=int)
+@click.pass_context
+def frames_delete(ctx, path, frame_number):
+    """Delete a frame from a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'spr:deleteFrame({frame_number})\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "delete frame failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "deleted_frame": frame_number})
+    else:
+        click.echo(f"Deleted frame {frame_number} from {os.path.abspath(path)}")
+
+
+# ── tags management ─────────────────────────────────────────────────
+
+
+@tags.command("add")
+@click.argument("path")
+@click.option("--name", required=True, help="Tag name")
+@click.option("--from-frame", "from_f", type=int, required=True, help="Start frame (1-based)")
+@click.option("--to-frame", "to_f", type=int, required=True, help="End frame (1-based)")
+@click.pass_context
+def tags_add(ctx, path, name, from_f, to_f):
+    """Add a new frame tag to a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'local tag = spr:newTag({from_f}, {to_f})\n'
+        f'tag.name = "{name}"\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "add tag failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "tag": {"name": name, "from": from_f, "to": to_f}})
+    else:
+        click.echo(f"Added tag '{name}' [{from_f}→{to_f}] to {os.path.abspath(path)}")
+
+
+@tags.command("delete")
+@click.argument("path")
+@click.argument("name")
+@click.pass_context
+def tags_delete(ctx, path, name):
+    """Delete a tag by name from a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'for i, tag in ipairs(spr.tags) do\n'
+        f'  if tag.name == "{name}" then\n'
+        f'    spr:deleteTag(tag)\n'
+        f'    break\n'
+        f'  end\n'
+        f'end\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "delete tag failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "deleted": name})
+    else:
+        click.echo(f"Deleted tag '{name}' from {os.path.abspath(path)}")
+
+
+# ── slices management ───────────────────────────────────────────────
+
+
+@slices.command("add")
+@click.argument("path")
+@click.option("--name", required=True, help="Slice name")
+@click.option("--x", type=int, default=0)
+@click.option("--y", type=int, default=0)
+@click.option("--width", type=int, required=True)
+@click.option("--height", type=int, required=True)
+@click.pass_context
+def slices_add(ctx, path, name, x, y, width, height):
+    """Add a new slice to a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'local slice = spr:newSlice(Rectangle{{x={x}, y={y}, '
+        f'width={width}, height={height}}})\n'
+        f'slice.name = "{name}"\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "add slice failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "slice": {"name": name, "x": x, "y": y, "width": width, "height": height}})
+    else:
+        click.echo(f"Added slice '{name}' to {os.path.abspath(path)}")
+
+
+@slices.command("delete")
+@click.argument("path")
+@click.argument("name")
+@click.pass_context
+def slices_delete(ctx, path, name):
+    """Delete a slice by name from a sprite."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'for i, slc in ipairs(spr.slices) do\n'
+        f'  if slc.name == "{name}" then\n'
+        f'    spr:deleteSlice(slc)\n'
+        f'    break\n'
+        f'  end\n'
+        f'end\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if result.get("returncode", 0) not in (0, None):
+        raise RuntimeError(result.get("stderr", "delete slice failed"))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "deleted": name})
+    else:
+        click.echo(f"Deleted slice '{name}' from {os.path.abspath(path)}")
+
+
+# ── command subcommand ──────────────────────────────────────────────
+
+
+@cli.command("command")
+@click.argument("command_id")
+@click.argument("path", required=False)
+@click.option("--param", "-p", multiple=True, help="Command parameters (key=value)")
+@click.pass_context
+def run_command(ctx, command_id, path, param):
+    """Run any Aseprite built-in command by ID.
+
+    Examples:
+      cli-anything-aseprite command NewFile sprite.aseprite --param width=64 --param height=64
+      cli-anything-aseprite command InvertMask
+    """
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+
+    params_lua = ""
+    for p in param:
+        if "=" in p:
+            k, v = p.split("=", 1)
+            try:
+                int(v)  # numeric?
+            except ValueError:
+                if v not in ("true", "false"):
+                    v = f'"{v}"'
+            params_lua += f"{k}={v}, "
+
+    if params_lua:
+        code = f'app.command.{command_id}{{ {params_lua} }}'
+    else:
+        code = f'app.command.{command_id}()'
+
+    if path:
+        safe = os.path.abspath(path).replace("\\", "/")
+        code += f'\nlocal spr = app.sprites[1]; spr:saveCopyAs("{safe}")'
+
+    result = runner.run_inline(code, sprite_path=os.path.abspath(path) if path else None)
+    if ctx.obj["json"]:
+        JSONOutput.print(result)
+    else:
+        if result.get("stderr"):
+            click.echo(result["stderr"], err=True)
+        else:
+            click.echo(f"Command '{command_id}' executed.")
+
+
+# ── color commands ──────────────────────────────────────────────────
+
+
+@cli.group()
+def color():
+    """Get or set foreground/background colors."""
+
+
+@color.command("get")
+@click.pass_context
+def color_get(ctx):
+    """Get current foreground and background colors."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    lua = (
+        'local fg = app.fgColor\n'
+        'local bg = app.bgColor\n'
+        'print("{"'
+        '.."\\"fg\\":{\\"r\\":"..fg.red..",\\"g\\":"..fg.green'
+        '..",\\"b\\":"..fg.blue..",\\"a\\":"..fg.alpha.."},'
+        '.."\\"bg\\":{\\"r\\":"..bg.red..",\\"g\\":"..bg.green'
+        '..",\\"b\\":"..bg.blue..",\\"a\\":"..bg.alpha.."}'
+        '.."}")\n'
+    )
+    result = runner.run_inline(lua)
+    if ctx.obj["json"]:
+        JSONOutput.print(result.get("parsed", result))
+    else:
+        if result.get("parsed"):
+            fg = result["parsed"]["fg"]
+            bg = result["parsed"]["bg"]
+            click.echo(f"Foreground: rgba({fg['r']},{fg['g']},{fg['b']},{fg['a']})")
+            click.echo(f"Background: rgba({bg['r']},{bg['g']},{bg['b']},{bg['a']})")
+
+
+@color.command("set")
+@click.argument("which", type=click.Choice(["fg", "bg"]))
+@click.argument("color_str", metavar="COLOR")
+@click.pass_context
+def color_set(ctx, which, color_str):
+    """Set foreground (fg) or background (bg) color.
+
+    COLOR format: r,g,b or r,g,b,a
+    """
+    parts = [int(x.strip()) for x in color_str.split(",")]
+    r, g, b = parts[0], parts[1], parts[2]
+    a = parts[3] if len(parts) > 3 else 255
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    varname = "fgColor" if which == "fg" else "bgColor"
+    lua = f'app.{varname} = Color({r},{g},{b},{a})'
+    result = runner.run_inline(lua)
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "color": {"r": r, "g": g, "b": b, "a": a}})
+    else:
+        click.echo(f"Set {which} color to rgba({r},{g},{b},{a})")
+
+
+# ── select commands ─────────────────────────────────────────────────
+
+
+@cli.group()
+def select():
+    """Manage sprite selection."""
+
+
+@select.command("all")
+@click.argument("path")
+@click.pass_context
+def select_all(ctx, path):
+    """Select entire canvas."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'local sel = Selection(spr)\n'
+        f'sel:selectAll()\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "selection": "all"})
+    else:
+        click.echo(f"Selected all in {os.path.abspath(path)}")
+
+
+@select.command("none")
+@click.argument("path")
+@click.pass_context
+def select_none(ctx, path):
+    """Deselect everything."""
+    runner = ScriptRunner(_global_session.project._aseprite)
+    runner._dry_run = ctx.obj.get("dry_run", False)
+    safe = os.path.abspath(path).replace("\\", "/")
+    lua = (
+        f'local spr = app.sprites[1]\n'
+        f'local sel = Selection(spr)\n'
+        f'sel:deselect()\n'
+        f'spr:saveCopyAs("{safe}")'
+    )
+    result = runner.run_inline(lua, sprite_path=os.path.abspath(path))
+    if ctx.obj["json"]:
+        JSONOutput.print({"status": "ok", "path": os.path.abspath(path),
+                          "selection": "none"})
+    else:
+        click.echo(f"Deselected {os.path.abspath(path)}")
 
 
 def main():
