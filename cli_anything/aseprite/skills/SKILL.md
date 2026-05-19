@@ -4,7 +4,7 @@ description: Stateful CLI harness for Aseprite pixel art editor — inspect spri
 metadata:
   category: cli-harness
   target: aseprite
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # cli-anything-aseprite
@@ -99,7 +99,13 @@ cli-anything-aseprite export gif <file> --output <gif> [--scale F]
 cli-anything-aseprite export tileset <file> --output-sheet <png> [--output-data <json>]
 ```
 
-Sprite sheet options: `--sheet-type`, `--sheet-width`, `--sheet-height`, `--split-layers`, `--split-tags`, `--split-slices`, `--layer`, `--tag`, `--frame-range`, `--scale`, `--trim`, `--trim-sprite`, `--border-padding`, `--shape-padding`, `--inner-padding`, `--extrude`.
+Sprite sheet options: `--sheet-type`, `--sheet-width`, `--sheet-height`, `--split-layers`, `--split-tags`, `--split-slices`, `--split-grid`, `--all-layers`, `--ignore-layer`, `--layer`, `--tag`/`--frame-tag`, `--frame-range`, `--scale`, `--dpi`, `--trim`, `--trim-sprite`, `--crop x,y,w,h`, `--border-padding`, `--inner-padding`, `--extrude`, `--merge-duplicates`, `--ignore-empty`, `--oneframe`, `--color-mode`, `--pixel-format`, `--new-power-of-two-size`, `--filename-format`.
+
+Frame export options: `--frame N`, `--layer NAME`, `--tag`/`--frame-tag`, `--scale`, `--trim`, `--crop`, `--dpi`, `--pixel-format`, `--color-mode`, `--oneframe`, `--all-layers`, `--ignore-layer`.
+
+GIF export options: `--scale`, `--tag`/`--frame-tag`, `--frame-range`, `--trim`, `--crop`, `--dpi`, `--pixel-format`, `--color-mode`, `--oneframe`, `--all-layers`, `--ignore-layer`, `--layer`.
+
+Tileset export options: `--layer`, `--tag`/`--frame-tag`, `--scale`, `--border-padding`, `--inner-padding`, `--trim`, `--extrude`, `--merge-duplicates`, `--ignore-empty`, `--all-layers`, `--ignore-layer`.
 
 ### script — Run Lua scripts
 
@@ -109,6 +115,27 @@ cli-anything-aseprite script eval <file> <lua_code> [-p key=value ...]
 ```
 
 Runs Lua scripts or inline code against a sprite. Parameters passed via `--script-param`. JSON stdout from scripts is auto-parsed.
+
+### draw — Programmatic pixel art creation
+
+```
+cli-anything-aseprite draw new <file> <width> <height> [--color-mode rgba|grayscale|indexed]
+cli-anything-aseprite draw fill <file> --color r,g,b[,a]
+cli-anything-aseprite draw rect <file> <x> <y> <w> <h> --color r,g,b[,a] [--outline]
+cli-anything-aseprite draw circle <file> <cx> <cy> <radius> --color r,g,b[,a] [--outline]
+cli-anything-aseprite draw line <file> <x1> <y1> <x2> <y2> --color r,g,b[,a]
+cli-anything-aseprite draw grad <file> --from-color r,g,b --to-color r,g,b [--direction h|v]
+```
+
+Fluent Python API for generating pixel art via Lua scripts. Chain calls then `.save()` to execute.
+
+### shell — Interactive Lua console
+
+```
+cli-anything-aseprite shell [file]
+```
+
+Opens Aseprite's built-in interactive Lua shell (`--shell` mode). If a sprite file is provided, it is loaded and available as `app.sprites[1]`.
 
 ### session — Manage interactive session
 
@@ -126,7 +153,7 @@ Session persists across commands. `state` shows open sprites and the active one.
 cli-anything-aseprite repl
 ```
 
-Starts an interactive REPL with commands: `open`, `info`, `layers`, `tags`, `slices`, `palette`, `focus`, `close`, `state`, `export`, `run`, `eval`, `help`, `quit`.
+Starts an interactive REPL with commands: `open`, `info`, `layers`, `tags`, `slices`, `palette`, `focus`, `close`, `state`, `export sheet`, `export frame`, `export gif`, `export tileset`, `run`, `eval`, `shell`, `draw new`, `draw fill`, `draw rect`, `draw circle`, `draw line`, `draw grad`, `help`, `quit`.
 
 ## JSON Output Examples
 
@@ -162,3 +189,6 @@ $ cli-anything-aseprite --json info character.aseprite
 - Session auto-saves state on exit; use `--state-file` to share state between processes
 - When exporting sprite sheets, always provide `--output-data` to get frame metadata JSON
 - The `--list-layers` / `--list-tags` / `--list-slices` flags on native aseprite are wrapped by the corresponding commands
+- Use `draw new` + `draw fill` + `draw rect`/`circle`/`line` to create images programmatically from AI agents
+- Use `shell` to open an interactive Lua console for debugging or ad-hoc Lua scripting
+- Export commands support all native Aseprite CLI flags: `--trim`, `--extrude`, `--crop`, `--scale`, `--dpi`, `--split-grid`, `--ignore-empty`, `--merge-duplicates`, `--oneframe`, `--color-mode`, `--pixel-format`, `--new-power-of-two-size`, `--filename-format`, `--frame-tag`, `--all-layers`, `--ignore-layer`

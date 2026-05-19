@@ -298,24 +298,35 @@ def export():
 @click.option("--output-sheet", required=True, help="Output sprite sheet PNG")
 @click.option("--output-data", help="Output JSON metadata file")
 @click.option("--layer", help="Include only this layer")
+@click.option("--ignore-layer", help="Exclude a specific layer")
+@click.option("--all-layers", is_flag=True, help="Export all layers (use with --split-layers)")
 @click.option("--split-layers", is_flag=True, help="Export layers separately")
 @click.option("--split-tags", is_flag=True, help="Export tags separately")
 @click.option("--split-slices", is_flag=True, help="Export slices separately")
-@click.option("--tag", help="Export only frames in this tag")
+@click.option("--split-grid", is_flag=True, help="Export by grid cells")
+@click.option("--tag", "--frame-tag", help="Export only frames in this tag")
 @click.option("--frame-range", help="Export frame range (from,to)")
 @click.option("--sheet-type", help="Sheet layout: horizontal, vertical, rows, columns, packed")
 @click.option("--sheet-width", type=int, help="Fixed sheet width in pixels")
 @click.option("--sheet-height", type=int, help="Fixed sheet height in pixels")
 @click.option("--scale", type=float, help="Scale factor (e.g., 2.0)")
+@click.option("--dpi", type=float, help="DPI for the output file")
 @click.option("--trim", is_flag=True, help="Trim frames in sheet")
 @click.option("--trim-sprite", is_flag=True, help="Trim whole sprite")
+@click.option("--crop", help="Crop to rectangle: x,y,w,h")
 @click.option("--border-padding", type=int, help="Padding on texture border")
-@click.option("--shape-padding", type=int, help="Padding between frames")
-@click.option("--inner-padding", type=int, help="Padding inside each frame")
+@click.option("--inner-padding", type=int, help="Padding between frames in sheet")
 @click.option("--extrude", is_flag=True, help="Extrude edges by 1px")
+@click.option("--merge-duplicates", is_flag=True, help="Merge identical frames")
+@click.option("--ignore-empty", is_flag=True, help="Skip empty cels/frames")
+@click.option("--oneframe", is_flag=True, help="Export one frame only")
+@click.option("--color-mode", help="Convert color mode: rgb, indexed, grayscale")
+@click.option("--pixel-format", help="Pixel format (e.g. RGBA8888)")
+@click.option("--new-power-of-two-size", is_flag=True, help="Force power-of-2 sheet dimensions")
+@click.option("--filename-format", help="Filename template: {layer} {frame} {group} {tag}")
 @click.pass_context
 def export_sheet(ctx, path, output_sheet, output_data, **kwargs):
-    """Export a sprite as a sprite sheet."""
+    """Export a sprite as a sprite sheet with full CLI options."""
     exp = Exporter(_global_session.project._aseprite)
     exp._dry_run = ctx.obj.get("dry_run", False)
 
@@ -346,12 +357,26 @@ def export_sheet(ctx, path, output_sheet, output_data, **kwargs):
 @click.option("--output", required=True, help="Output image file")
 @click.option("--frame", type=int, default=0, help="Frame number to export")
 @click.option("--layer", help="Layer to export")
+@click.option("--tag", "--frame-tag", help="Export frame from tag")
+@click.option("--scale", type=float, help="Scale factor (e.g., 2.0)")
+@click.option("--trim", is_flag=True, help="Trim transparent borders")
+@click.option("--crop", help="Crop to rectangle: x,y,w,h")
+@click.option("--dpi", type=float, help="DPI for output file")
+@click.option("--pixel-format", help="Pixel format (e.g. RGBA8888)")
+@click.option("--color-mode", help="Convert color mode: rgb, indexed, grayscale")
+@click.option("--oneframe", is_flag=True, help="Export single frame (useful with --save-as)")
+@click.option("--all-layers", is_flag=True, help="Include all layers")
+@click.option("--ignore-layer", help="Exclude a specific layer")
 @click.pass_context
-def export_frame_cmd(ctx, path, output, frame, layer):
-    """Export a single frame as an image."""
+def export_frame_cmd(ctx, path, output, frame, layer, **kwargs):
+    """Export a single frame as an image with full CLI options."""
     exp = Exporter(_global_session.project._aseprite)
     exp._dry_run = ctx.obj.get("dry_run", False)
-    result = exp.export_frame(path, output, frame=frame, layer=layer)
+    filtered = {}
+    for k, v in kwargs.items():
+        if v is True or (v is not None and v is not False):
+            filtered[k] = v
+    result = exp.export_frame(path, output, frame=frame, layer=layer, **filtered)
     if ctx.obj["json"]:
         JSONOutput.print({"status": "ok", "output": result, "frame": frame})
     else:
@@ -362,15 +387,27 @@ def export_frame_cmd(ctx, path, output, frame, layer):
 @click.argument("path")
 @click.option("--output", required=True, help="Output GIF file")
 @click.option("--scale", type=float, help="Scale factor")
+@click.option("--tag", "--frame-tag", help="Export only frames in this tag")
+@click.option("--frame-range", help="Export frame range (from,to)")
+@click.option("--trim", is_flag=True, help="Trim transparent borders")
+@click.option("--crop", help="Crop to rectangle: x,y,w,h")
+@click.option("--dpi", type=float, help="DPI for output file")
+@click.option("--pixel-format", help="Pixel format (e.g. RGBA8888)")
+@click.option("--color-mode", help="Convert color mode: rgb, indexed, grayscale")
+@click.option("--oneframe", is_flag=True, help="Export single frame only")
+@click.option("--all-layers", is_flag=True, help="Include all layers")
+@click.option("--ignore-layer", help="Exclude a specific layer")
+@click.option("--layer", help="Include only this layer")
 @click.pass_context
-def export_gif_cmd(ctx, path, output, scale):
-    """Export sprite as animated GIF."""
+def export_gif_cmd(ctx, path, output, **kwargs):
+    """Export sprite as animated GIF with full CLI options."""
     exp = Exporter(_global_session.project._aseprite)
     exp._dry_run = ctx.obj.get("dry_run", False)
-    kwargs = {}
-    if scale:
-        kwargs["scale"] = scale
-    result = exp.export_gif(path, output, **kwargs)
+    filtered = {}
+    for k, v in kwargs.items():
+        if v is True or (v is not None and v is not False):
+            filtered[k] = v
+    result = exp.export_gif(path, output, **filtered)
     if ctx.obj["json"]:
         JSONOutput.print({"status": "ok", "output": result})
     else:
@@ -381,12 +418,27 @@ def export_gif_cmd(ctx, path, output, scale):
 @click.argument("path")
 @click.option("--output-sheet", required=True, help="Output tileset image")
 @click.option("--output-data", help="Output JSON metadata file")
+@click.option("--layer", help="Export tiles from a specific layer")
+@click.option("--tag", "--frame-tag", help="Export tiles from a specific tag")
+@click.option("--scale", type=float, help="Scale factor")
+@click.option("--border-padding", type=int, help="Padding around the texture border")
+@click.option("--inner-padding", type=int, help="Padding between tiles")
+@click.option("--trim", is_flag=True, help="Trim transparent borders")
+@click.option("--extrude", is_flag=True, help="Extrude edges by 1px")
+@click.option("--merge-duplicates", is_flag=True, help="Merge identical tiles")
+@click.option("--ignore-empty", is_flag=True, help="Skip empty tiles")
+@click.option("--all-layers", is_flag=True, help="Include all layers")
+@click.option("--ignore-layer", help="Exclude a specific layer")
 @click.pass_context
-def export_tileset(ctx, path, output_sheet, output_data):
-    """Export tilesets from visible tilemap layers."""
+def export_tileset(ctx, path, output_sheet, output_data, **kwargs):
+    """Export tilesets from visible tilemap layers with full CLI options."""
     exp = Exporter(_global_session.project._aseprite)
     exp._dry_run = ctx.obj.get("dry_run", False)
-    result = exp.export_tileset(path, output_sheet, output_data)
+    filtered = {}
+    for k, v in kwargs.items():
+        if v is True or (v is not None and v is not False):
+            filtered[k] = v
+    result = exp.export_tileset(path, output_sheet, output_data, **filtered)
     if ctx.obj["json"]:
         summary = {"sheet": result["sheet"]}
         if "data" in result:
@@ -500,6 +552,42 @@ def session_close(ctx, path):
         click.echo(f"Closed sprite: {path or '(active)'}")
 
 
+# ── shell command ──────────────────────────────────────────────────
+
+
+@cli.command()
+@click.argument("path", required=False)
+@click.pass_context
+def shell(ctx, path):
+    """Start an interactive Aseprite Lua shell (--shell mode).
+
+    Opens Aseprite's built-in interactive Lua console. If PATH is
+    provided, the sprite is loaded first and available as
+    app.sprites[1] in the Lua environment.
+    """
+    from cli_anything.aseprite.core.script import ScriptRunner
+    import shutil
+
+    aseprite_bin = _global_session.project._aseprite
+    if not shutil.which(aseprite_bin) and aseprite_bin != "aseprite":
+        aseprite_bin = shutil.which("aseprite")
+    if not aseprite_bin:
+        click.echo("Aseprite binary not found in PATH.", err=True)
+        return
+
+    if ctx.obj.get("dry_run"):
+        click.echo(f"[dry-run] Would start: {aseprite_bin} -b --shell"
+                   + (f" {path}" if path else ""))
+        return
+
+    import subprocess
+    args = [aseprite_bin, "-b", "--shell"]
+    if path:
+        args.insert(2, os.path.abspath(path))
+    click.echo(f"Starting Aseprite Lua shell (type Ctrl+D to exit)...")
+    subprocess.run(args)
+
+
 # ── repl command ───────────────────────────────────────────────────
 
 
@@ -525,8 +613,11 @@ def repl(ctx, prompt):
         "state": "Show session state",
         "export sheet <file> --output-sheet <png> [...]": "Export sprite sheet",
         "export frame <file> --output <png> [...]": "Export single frame",
+        "export gif <file> --output <gif> [...]": "Export animated GIF",
+        "export tileset <file> --output-sheet <png> [...]": "Export tileset",
         "run <file> <script>": "Run Lua script",
         "eval <file> <code>": "Eval Lua code",
+        "shell [file]": "Start Aseprite Lua interactive shell",
         "draw new <file> W H": "Create new canvas",
         "draw rect <file> X Y W H --color r,g,b": "Draw filled rectangle",
         "draw circle <file> CX CY R --color r,g,b": "Draw filled circle",

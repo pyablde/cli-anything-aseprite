@@ -278,6 +278,101 @@ class TestExporter:
         assert "--scale" in call_args
         assert "--trim" in call_args
 
+    def test_export_sheet_with_crop(self, mock_subprocess_run):
+        e = Exporter()
+        mock_subprocess_run.return_value = mock.MagicMock(
+            returncode=0, stderr="", stdout="")
+        e.export_sprite_sheet("s.aseprite", "sheet.png",
+                              crop=(10, 20, 100, 200))
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--crop" in call_args
+        crop_idx = call_args.index("--crop")
+        assert call_args[crop_idx + 1] == "10,20,100,200"
+
+    def test_export_sheet_all_options(self, mock_subprocess_run):
+        e = Exporter()
+        mock_subprocess_run.return_value = mock.MagicMock(
+            returncode=0, stderr="", stdout="")
+        e.export_sprite_sheet("s.aseprite", "sheet.png", "data.json",
+                              all_layers=True, split_layers=True,
+                              split_grid=True, merge_duplicates=True,
+                              ignore_empty=True, oneframe=True,
+                              extrude=True, new_power_of_two_size=True,
+                              color_mode="indexed", pixel_format="RGBA8888",
+                              dpi=300, scale=2.0, border_padding=4,
+                              inner_padding=2, sheet_type="packed",
+                              sheet_width=1024, sheet_height=1024,
+                              filename_format="{layer}_{frame}.png")
+        call_args = mock_subprocess_run.call_args[0][0]
+        flags = ["--all-layers", "--split-layers", "--split-grid",
+                 "--merge-duplicates", "--ignore-empty", "--oneframe",
+                 "--extrude", "--new-power-of-two-size",
+                 "--color-mode", "--pixel-format", "--dpi",
+                 "--scale", "--border-padding", "--inner-padding",
+                 "--sheet-type", "--sheet-width", "--sheet-height",
+                 "--filename-format"]
+        for flag in flags:
+            assert flag in call_args, f"Expected {flag} in call args"
+
+    def test_export_frame_with_kwargs(self, mock_subprocess_run):
+        e = Exporter()
+        mock_subprocess_run.return_value = mock.MagicMock(
+            returncode=0, stderr="", stdout="")
+        e.export_frame("s.aseprite", "out.png", frame=3,
+                       scale=2.0, trim=True, color_mode="indexed")
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--scale" in call_args
+        assert "--trim" in call_args
+        assert "--color-mode" in call_args
+
+    def test_export_gif_with_options(self, mock_subprocess_run):
+        e = Exporter()
+        mock_subprocess_run.return_value = mock.MagicMock(
+            returncode=0, stderr="", stdout="")
+        e.export_gif("s.aseprite", "out.gif",
+                     scale=2.0, frame_range="0,9",
+                     tag="walk", color_mode="indexed", dpi=72)
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--scale" in call_args
+        assert "--frame-range" in call_args
+        assert "--tag" in call_args
+        assert "--color-mode" in call_args
+        assert "--dpi" in call_args
+
+    def test_export_tileset_with_kwargs(self, mock_subprocess_run):
+        e = Exporter()
+        mock_subprocess_run.return_value = mock.MagicMock(
+            returncode=0, stderr="", stdout="")
+        e.export_tileset("s.aseprite", "tiles.png", "tiles.json",
+                         scale=2.0, border_padding=2, inner_padding=1,
+                         trim=True, extrude=True, merge_duplicates=True,
+                         ignore_empty=True, all_layers=True)
+        call_args = mock_subprocess_run.call_args[0][0]
+        assert "--export-tileset" in call_args
+        assert "--scale" in call_args
+        assert "--border-padding" in call_args
+        assert "--inner-padding" in call_args
+        assert "--trim" in call_args
+        assert "--extrude" in call_args
+        assert "--merge-duplicates" in call_args
+        assert "--ignore-empty" in call_args
+        assert "--all-layers" in call_args
+
+    def test_build_args_static_method(self):
+        kwargs = {
+            "crop": (10, 20, 30, 40),
+            "scale": 2.0,
+            "trim": True,
+            "color_mode": "rgb",
+            "sheet_width": 512,
+        }
+        result = Exporter._build_args(kwargs)
+        assert "--crop" in result
+        assert result[result.index("--crop") + 1] == "10,20,30,40"
+        assert "--scale" in result
+        assert result[result.index("--scale") + 1] == "2.0"
+        assert "--trim" in result  # bare flag, no value after it
+
 
 # ── Layers Tests ──────────────────────────────────────────────────
 

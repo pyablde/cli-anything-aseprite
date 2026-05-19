@@ -47,6 +47,7 @@ cli-anything-aseprite repl
 | Palette | `palette list`, `palette load` |
 | Export | `export sheet`, `export frame`, `export gif`, `export tileset` |
 | Script | `script run`, `script eval` |
+| Shell | `shell` |
 | Draw | `draw new`, `draw fill`, `draw rect`, `draw circle`, `draw line`, `draw grad` |
 | Session | `session state`, `session focus`, `session close` |
 | REPL | `repl` |
@@ -69,7 +70,7 @@ from cli_anything.aseprite.core.draw import Draw
 ```bash
 cd cli_anything/aseprite/tests
 pytest -v
-# 68 tests, all passing
+# 83 tests, all passing
 ```
 
 ## Project Structure
@@ -94,8 +95,8 @@ agent-harness/
 │       │   └── helpers.py         # Binary resolution, JSON output
 │       ├── tests/
 │       │   ├── TEST.md            # Test plan and results
-│       │   ├── test_core.py       # Unit tests (33 tests)
-│       │   └── test_full_e2e.py   # E2E tests (24 tests)
+│       │   ├── test_core.py       # Unit tests (48 tests)
+│       │   └── test_full_e2e.py   # E2E tests (35 tests)
 │       └── skills/
 │           └── SKILL.md           # AI agent skill definition
 └── skills/

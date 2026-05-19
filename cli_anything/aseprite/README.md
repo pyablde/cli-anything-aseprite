@@ -70,12 +70,13 @@ cli-anything-aseprite repl
 | `slices list <file>` | List sprite slices |
 | `palette list <file>` | List palette entries |
 | `palette load <file> <pal>` | Load palette into sprite |
-| `export sheet <file> ...` | Export sprite sheet with full options |
-| `export frame <file> ...` | Export single frame |
-| `export gif <file> ...` | Export animated GIF |
-| `export tileset <file> ...` | Export tileset |
+| `export sheet <file> ...` | Export sprite sheet (includes --trim, --scale, --extrude, --crop, --dpi, etc.) |
+| `export frame <file> ...` | Export single frame (includes --scale, --trim, --crop, --dpi, etc.) |
+| `export gif <file> ...` | Export animated GIF (includes --scale, --frame-range, --tag, etc.) |
+| `export tileset <file> ...` | Export tileset (includes --scale, --trim, --extrude, etc.) |
 | `script run <file> <lua>` | Run Lua script on sprite |
 | `script eval <file> <code>` | Evaluate inline Lua code |
+| `shell [file]` | Start Aseprite Lua interactive shell |
 | `draw new <file> W H` | Create new canvas for drawing |
 | `draw fill <file> <color>` | Fill canvas with solid color |
 | `draw rect <file> X Y W H <color>` | Draw filled/outlined rectangle |

@@ -301,3 +301,77 @@ class TestErrorHandling:
         runner._dry_run = True
         result = runner.run("bad.lua", "sprite.aseprite")
         assert result["dry_run"] is True
+
+
+# ── TestExpandedExport ─────────────────────────────────────────────
+
+
+class TestExpandedExport:
+    """Tests for extended export options (new flags added to match official CLI)."""
+
+    def test_export_sheet_crop_option(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_sprite_sheet("s.aseprite", "out.png",
+                                       crop=(10, 20, 100, 200))
+        assert result["sheet"] == "out.png"
+
+    def test_export_sheet_ignore_empty(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_sprite_sheet("s.aseprite", "out.png",
+                                       ignore_empty=True, merge_duplicates=True)
+        assert result["sheet"] == "out.png"
+
+    def test_export_sheet_split_grid(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_sprite_sheet("s.aseprite", "out.png",
+                                       split_grid=True, all_layers=True)
+        assert result["sheet"] == "out.png"
+
+    def test_export_sheet_color_and_format(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_sprite_sheet("s.aseprite", "out.png",
+                                       color_mode="indexed", pixel_format="RGBA8888",
+                                       dpi=300, new_power_of_two_size=True)
+        assert result["sheet"] == "out.png"
+
+    def test_export_sheet_oneframe(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_sprite_sheet("s.aseprite", "out.png", oneframe=True)
+        assert result["sheet"] == "out.png"
+
+    def test_export_frame_with_new_options(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_frame("s.aseprite", "out.png", frame=0,
+                                scale=2.0, trim=True, color_mode="rgb",
+                                dpi=72, tag="idle")
+        assert result == "out.png"
+
+    def test_export_gif_with_full_options(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_gif("s.aseprite", "out.gif",
+                              scale=3.0, frame_range="0,11",
+                              color_mode="indexed", dpi=150)
+        assert result == "out.gif"
+
+    def test_export_tileset_with_new_options(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_tileset("s.aseprite", "tiles.png", "tiles.json",
+                                  scale=2.0, border_padding=2, inner_padding=1,
+                                  trim=True, extrude=True, merge_duplicates=True,
+                                  ignore_empty=True, all_layers=True)
+        assert result["sheet"] == "tiles.png"
+
+    def test_export_gif_dry_run_pipeline(self):
+        e = Exporter()
+        e._dry_run = True
+        result = e.export_gif("/fake.aseprite", "anim.gif",
+                              scale=2.0, tag="walk", frame_range="0,7")
+        assert result == "anim.gif"
