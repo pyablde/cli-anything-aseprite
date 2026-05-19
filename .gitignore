@@ -1,0 +1,30 @@
+# Build
+build/
+dist/
+*.egg-info/
+*.egg
+__pycache__/
+*.py[cod]
+
+# Test artifacts
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Aseprite test outputs
+*.png
+*.aseprite
+*.ase
+
+# Temp files
+*.tmp
+lua_*.txt
