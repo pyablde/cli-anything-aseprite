@@ -66,23 +66,43 @@ cli-anything-aseprite repl
 | `open <file>` | Open and inspect a sprite |
 | `info [file]` | Show sprite metadata |
 | `layers list <file>` | List sprite layers |
+| `layers add <file> --name N` | Add a new layer |
+| `layers delete <file> <name>` | Delete a layer by name |
+| `layers rename <file> <old> <new>` | Rename a layer |
 | `tags list <file>` | List frame tags |
+| `tags add <file> --name N --from-frame F --to-frame T` | Add a frame tag |
+| `tags delete <file> <name>` | Delete a tag by name |
 | `slices list <file>` | List sprite slices |
+| `slices add <file> --name N --width W --height H` | Add a slice |
+| `slices delete <file> <name>` | Delete a slice by name |
+| `frames add <file> [--at N] [--empty]` | Add a new frame |
+| `frames delete <file> <N>` | Delete a frame |
 | `palette list <file>` | List palette entries |
 | `palette load <file> <pal>` | Load palette into sprite |
-| `export sheet <file> ...` | Export sprite sheet (includes --trim, --scale, --extrude, --crop, --dpi, etc.) |
-| `export frame <file> ...` | Export single frame (includes --scale, --trim, --crop, --dpi, etc.) |
-| `export gif <file> ...` | Export animated GIF (includes --scale, --frame-range, --tag, etc.) |
-| `export tileset <file> ...` | Export tileset (includes --scale, --trim, --extrude, etc.) |
+| `export sheet <file> ...` | Export sprite sheet (30+ native options) |
+| `export frame <file> ...` | Export single frame (11 native options) |
+| `export gif <file> ...` | Export animated GIF (11 native options) |
+| `export tileset <file> ...` | Export tileset (11 native options) |
+| `edit crop <file> --width W --height H` | Crop sprite |
+| `edit resize <file> --width W --height H` | Resize sprite |
+| `edit flatten <file>` | Flatten all layers |
+| `edit flip <file> [--horizontal\|--vertical]` | Flip sprite |
 | `script run <file> <lua>` | Run Lua script on sprite |
 | `script eval <file> <code>` | Evaluate inline Lua code |
 | `shell [file]` | Start Aseprite Lua interactive shell |
-| `draw new <file> W H` | Create new canvas for drawing |
-| `draw fill <file> <color>` | Fill canvas with solid color |
-| `draw rect <file> X Y W H <color>` | Draw filled/outlined rectangle |
-| `draw circle <file> CX CY R <color>` | Draw filled/outlined circle |
-| `draw line <file> X1 Y1 X2 Y2 <color>` | Draw Bresenham line |
-| `draw grad <file> <from> <to> <dir>` | Draw gradient pattern |
+| `command <CommandID> [file]` | Run any Aseprite built-in command |
+| `draw new <file> W H` | Create new canvas |
+| `draw fill <file> <color>` | Fill canvas (useTool: filled_rectangle) |
+| `draw rect <file> X Y W H <color>` | Draw rectangle (useTool) |
+| `draw circle <file> CX CY R <color>` | Draw circle (useTool: filled_ellipse) |
+| `draw ellipse <file> X Y W H <color>` | Draw ellipse (useTool) |
+| `draw line <file> X1 Y1 X2 Y2 <color>` | Draw line (useTool) |
+| `draw grad <file> <from> <to> <dir>` | Draw gradient fill |
+| `draw flood-fill <file> X Y <color>` | Flood fill region (useTool: paint_bucket) |
+| `color get` | Show fg/bg colors |
+| `color set fg\|bg r,g,b[,a]` | Set fg/bg color |
+| `select all <file>` | Select entire canvas |
+| `select none <file>` | Deselect |
 | `session state` | Show session state |
 | `session focus <file>` | Set active sprite |
 | `session close [file]` | Close a sprite |
